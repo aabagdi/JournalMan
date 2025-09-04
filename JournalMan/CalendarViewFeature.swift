@@ -80,7 +80,9 @@ struct CalendarViewFeature {
         return .none
         
       case let .dateTapped(date):
-        state.selectedDate = date
+        if !state.isDateInFuture(date: date) {
+          state.selectedDate = date
+        }
         return .none
         
       case .onAppear:
@@ -98,5 +100,9 @@ extension CalendarViewFeature.State {
   
   func isSameMonth(date: Date) -> Bool {
     Calendar.current.isDate(date, equalTo: currentMonth, toGranularity: .month)
+  }
+  
+  func isDateInFuture(date: Date) -> Bool {
+    Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: today)
   }
 }

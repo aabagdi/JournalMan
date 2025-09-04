@@ -106,7 +106,8 @@ struct CalendarView: View {
         date: date,
         isSelected: store.state.isSameDay(date: date, compareDate: store.selectedDate),
         isToday: store.state.isSameDay(date: date, compareDate: store.today),
-        isCurrentMonth: store.state.isSameMonth(date: date)
+        isCurrentMonth: store.state.isSameMonth(date: date),
+        isFutureDate: store.state.isDateInFuture(date: date)
       )
       .onTapGesture {
         store.send(.dateTapped(date), animation: .spring())
