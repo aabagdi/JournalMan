@@ -7,31 +7,25 @@
 
 import Foundation
 import AVFoundation
-import Speech
+@preconcurrency import Speech
 import Dependencies
 import DependenciesMacros
 
 @DependencyClient
 struct SpeechRecognizerClient {
-  var finishTask: @Sendable () async -> Void
   var requestAuthorization: @Sendable () async -> SFSpeechRecognizerAuthorizationStatus = { .notDetermined }
-  var startTask: @Sendable (_ request: UncheckedSendable<SFSpeechAudioBufferRecognitionRequest>) async ->
-  AsyncThrowingStream<SpeechRecognitionResult, Error> = { _ in .finished() }
+  var transcribeFile: @Sendable (_ url: URL) async throws -> String? = { _ in nil }
   
   enum Failure: Error, Equatable {
-    case taskError
-    case couldntStartAudioEngine
-    case couldntConfigureAudioSession
+    case recognizerNotAvailable
+    case transcriptionFailed
   }
 }
 
 extension SpeechRecognizerClient: DependencyKey {
   static var liveValue: Self {
-    let speech = Speech()
+    let speechRecognizer = SpeechRecognizer()
     return Self(
-      finishTask: {
-        await speech.finishTask()
-      },
       requestAuthorization: {
         await withCheckedContinuation { continuation in
           SFSpeechRecognizer.requestAuthorization { status in
@@ -39,128 +33,57 @@ extension SpeechRecognizerClient: DependencyKey {
           }
         }
       },
-      startTask: { request in
-        return await speech.startTask(request: request)
+      transcribeFile: { url in
+        return try await speechRecognizer.transcribeFile(at: url)
       }
     )
   }
 }
 
-private class Speech {
-  var audioEngine: AVAudioEngine? = nil
-  var recognitionTask: SFSpeechRecognitionTask? = nil
-  var recognitionContinuation: AsyncThrowingStream<SpeechRecognitionResult, any Error>.Continuation?
-  
-  func finishTask() {
-    self.audioEngine?.stop()
-    self.audioEngine?.inputNode.removeTap(onBus: 0)
-    self.recognitionTask?.finish()
-    self.recognitionContinuation?.finish()
-  }
-  
-  func startTask(
-    request: UncheckedSendable<SFSpeechAudioBufferRecognitionRequest>
-  ) -> AsyncThrowingStream<SpeechRecognitionResult, any Error> {
-    let request = request.wrappedValue
+private actor SpeechRecognizer {
+  func transcribeFile(at url: URL) async throws -> String? {
+    guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US")),
+          recognizer.isAvailable else {
+      throw SpeechRecognizerClient.Failure.recognizerNotAvailable
+    }
     
-    return AsyncThrowingStream { continuation in
-      self.recognitionContinuation = continuation
-      let audioSession = AVAudioSession.sharedInstance()
-      do {
-        try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-      } catch {
-        continuation.finish(throwing: SpeechRecognizerClient.Failure.couldntConfigureAudioSession)
-        return
-      }
-      
-      self.audioEngine = AVAudioEngine()
-      let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))!
-      self.recognitionTask = speechRecognizer.recognitionTask(with: request) { result, error in
-        switch (result, error) {
-        case let (.some(result), _):
-          continuation.yield(SpeechRecognitionResult(result))
-        case (_, .some):
-          continuation.finish(throwing: SpeechRecognizerClient.Failure.taskError)
-        case (.none, .none):
-          fatalError("It should not be possible to have both a nil result and nil error.")
+    let request = SFSpeechURLRecognitionRequest(url: url)
+    request.shouldReportPartialResults = false
+    request.requiresOnDeviceRecognition = true
+    
+    let stream = AsyncThrowingStream<String, Error> { continuation in
+      let task = recognizer.recognitionTask(with: request) { result, error in
+        if let error {
+          continuation.finish(throwing: error)
+        } else if let result {
+          if result.isFinal {
+            continuation.yield(result.bestTranscription.formattedString)
+            continuation.finish()
+          }
         }
       }
-      
-      continuation.onTermination = {
-        [
-          speechRecognizer = UncheckedSendable(speechRecognizer),
-          audioEngine = UncheckedSendable(audioEngine),
-          recognitionTask = UncheckedSendable(recognitionTask)
-        ]
-        _ in
-        
-        _ = speechRecognizer
-        audioEngine.wrappedValue?.stop()
-        audioEngine.wrappedValue?.inputNode.removeTap(onBus: 0)
-        recognitionTask.wrappedValue?.finish()
-      }
-      
-      self.audioEngine?.inputNode.installTap(
-        onBus: 0,
-        bufferSize: 1024,
-        format: self.audioEngine?.inputNode.outputFormat(forBus: 0)
-      ) { buffer, _ in
-        request.append(buffer)
-      }
-      
-      self.audioEngine?.prepare()
-      do {
-        try self.audioEngine?.start()
-      } catch {
-        continuation.finish(throwing: SpeechRecognizerClient.Failure.couldntStartAudioEngine)
-        return
+      continuation.onTermination = { @Sendable _ in
+        task.cancel()
       }
     }
+    
+    for try await transcription in stream {
+      return transcription
+    }
+    
+    throw SpeechRecognizerClient.Failure.transcriptionFailed
   }
 }
 
 extension SpeechRecognizerClient: TestDependencyKey {
   static var previewValue: Self {
-    let isRecording = LockIsolated(false)
-    
     return Self(
-      finishTask: { isRecording.setValue(false) },
       requestAuthorization: { .authorized },
-      startTask: { _ in
-        AsyncThrowingStream { continuation in
-          Task {
-            isRecording.setValue(true)
-            var finalText = """
-              Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor \
-              incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud \
-              exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute \
-              irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla \
-              pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui \
-              officia deserunt mollit anim id est laborum.
-              """
-            var text = ""
-            while isRecording.value {
-              let word = finalText.prefix { $0 != " " }
-              try await Task.sleep(for: .milliseconds(word.count * 50 + .random(in: 0...200)))
-              finalText.removeFirst(word.count)
-              if finalText.first == " " {
-                finalText.removeFirst()
-              }
-              text += word + " "
-              continuation.yield(
-                SpeechRecognitionResult(
-                  bestTranscription: Transcription(
-                    formattedString: text,
-                    segments: []
-                  ),
-                  isFinal: false,
-                  transcriptions: []
-                )
-              )
-            }
-          }
-        }
+      transcribeFile: { _ in
+        """
+        This is a test transcription. The weather is nice today and I'm feeling great about 
+        the progress we're making on this project.
+        """
       }
     )
   }

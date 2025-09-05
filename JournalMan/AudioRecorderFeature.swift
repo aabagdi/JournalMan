@@ -33,10 +33,15 @@ struct AudioRecorderFeature {
     Reduce { state, action in
       switch action {
       case .recordButtonTapped:
+        print("record button tapped")
+        print("Current isRecording state: \(state.isRecording)")
+        
         if !state.isRecording {
           return .run { send in
             do {
+              print("Attempting to start recording...")
               let started = try await audioRecorder.startRecording()
+              print("Recording started: \(started)")
               
               if started {
                 await send(.recordingStarted)
@@ -59,11 +64,13 @@ struct AudioRecorderFeature {
                 }
               }
             } catch {
+              print("Error starting recording: \(error)")
               await send(.recordingStopped)
             }
           }
         } else {
           return .run { send in
+            print("Stopping recording...")
             await audioRecorder.stopRecording()
             await send(.recordingStopped)
           }
@@ -75,15 +82,19 @@ struct AudioRecorderFeature {
         }
         
       case .recordingStarted:
+        print("Recording started - updating state")
         state.isRecording = true
         state.currentTime = 0
-        state.animationAmount = 2.0
+        state.animationAmount = 1.2
+        state.fadeInOut = true
         return .none
         
       case .recordingStopped:
+        print("Recording stopped - updating state")
         state.isRecording = false
         state.currentTime = nil
         state.animationAmount = 1.0
+        state.fadeInOut = false
         return .none
         
       case let .updateCurrentTime(time):

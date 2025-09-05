@@ -116,8 +116,6 @@ private class AudioRecorder {
   var recorder: AVAudioRecorder?
   
   private var currentRecordingID: UUID?
-  private var speechRecognitionTask: Task<String?, Error>?
-  private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
   
   private var currentRecordingURL: URL? {
     get { recorder?.url }
@@ -151,20 +149,27 @@ private class AudioRecorder {
   func stop() async {
     let wasRecording = self.recorder?.isRecording ?? false
     let recordingURL = self.recorder?.url
+    let recordingID = self.currentRecordingID
     
     self.recorder?.stop()
     self.recorder = nil
+    self.delegate = nil
     
-    await speechRecognizer.finishTask()
-    speechRecognitionTask?.cancel()
-    speechRecognitionTask = nil
-    recognitionRequest = nil
+    if wasRecording, let url = recordingURL, let id = recordingID {
+      do {
+        _ = try await processRecording(at: url, recordingID: id)
+      } catch {
+        print("Failed to process recording on manual stop: \(error)")
+      }
+    }
+    
+    if let url = recordingURL {
+      await cleanupTempFile(at: url)
+    }
     
     try? AVAudioSession.sharedInstance().setActive(false)
     
-    if wasRecording, let url = recordingURL {
-      await cleanupTempFile(at: url)
-    }
+    self.currentRecordingID = nil
   }
   
   func start() async throws -> Bool {
@@ -173,164 +178,135 @@ private class AudioRecorder {
     await self.stop()
     
     let speechStatus = await speechRecognizer.requestAuthorization()
-    guard speechStatus == .authorized else { throw AudioRecorderClient.Failure.speechRecognitionNotAuthorized }
+    guard speechStatus == .authorized else {
+      throw AudioRecorderClient.Failure.speechRecognitionNotAuthorized
+    }
     
-    let stream = AsyncThrowingStream<Bool, any Error> { continuation in
-      do {
-        let recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        recognitionRequest.shouldReportPartialResults = true
-        recognitionRequest.requiresOnDeviceRecognition = true
-        self.recognitionRequest = recognitionRequest
-        
-        if speechStatus == .authorized {
-          self.speechRecognitionTask = Task { [weak self] in
-            guard let self else { return nil }
-            
-            var finalTranscript: String?
-            
-            do {
-              let recognitionStream = await self.speechRecognizer.startTask(UncheckedSendable(recognitionRequest))
-              
-              for try await result in recognitionStream {
-                finalTranscript = result.bestTranscription.formattedString
-                
-                if result.isFinal {
-                  print(finalTranscript ?? "")
-                  break
-                }
-              }
-            } catch {
-              throw AudioRecorderClient.Failure.speechRecognitionError
-            }
-            
-            return finalTranscript
-          }
-        }
-        
-        self.delegate = Delegate(
-          didFinishRecording: { [weak self] flag in
-            guard let self else {
-              continuation.yield(false)
-              continuation.finish()
+    self.currentRecordingID = uuid()
+    
+    do {
+      try AVAudioSession.sharedInstance().setCategory(
+        .playAndRecord,
+        mode: .default,
+        options: .defaultToSpeaker
+      )
+      try AVAudioSession.sharedInstance().setActive(true)
+      
+      self.delegate = Delegate(
+        didFinishRecording: { [weak self] flag in
+          guard let self else { return }
+          
+          print("Delegate: Recording finished with flag: \(flag)")
+          
+          Task {
+            guard flag,
+                  let recorder = await self.recorder,
+                  let recordingID = await self.currentRecordingID else {
               return
             }
             
-            Task {
-              guard let recorder = await self.recorder else {
-                continuation.yield(false)
-                continuation.finish()
-                return
-              }
-              
-              let recordingURL = recorder.url
-              
-              let transcript = try await self.speechRecognitionTask?.value
-              
-              defer {
-                Task { @MainActor in
-                  await cleanupTempFile(at: recordingURL)
-                }
-              }
-              
-              do {
-                let audioData = try Data(contentsOf: recordingURL)
-                
-                let windows = try await AudioRecorder.extractAudioSamples(
-                  from: recordingURL,
-                  targetSampleCount: 15600
-                )
-                
-                var weightedVotes = [String: Double]()
-                var predictions = [(emotion: String, confidence: Double)]()
-                
-                for window in windows {
-                  let input = await EmotionClassifierInput(audioSamples: window)
-                  let output = try await self.emotionClassifier.predict(input)
-                  
-                  let topEmotion = await output.target
-                  let confidence = await output.targetProbability[topEmotion] ?? 0.0
-                  
-                  weightedVotes[topEmotion, default: 0] += confidence
-                  predictions.append((emotion: topEmotion, confidence: confidence))
-                }
-                
-                let dominantEmotion = weightedVotes.max { $0.value < $1.value }
-                
-                let totalWeight = weightedVotes.values.reduce(0, +)
-                let winningWeightPercentage = (dominantEmotion?.value ?? 0) / totalWeight
-                let actualVoteCount = predictions.filter { $0.emotion == dominantEmotion?.key }.count
-                
-                print("=== Weighted Voting Results ===")
-                print("Dominant emotion: \(dominantEmotion?.key ?? "unknown")")
-                print("Weighted score: \(String(format: "%.2f", dominantEmotion?.value ?? 0))")
-                print("Actual vote count: \(actualVoteCount) out of \(predictions.count) windows")
-                print("Weighted percentage: \(String(format: "%.1f%%", winningWeightPercentage * 100))")
-                print("\nWeighted scores:")
-                for (emotion, score) in weightedVotes.sorted(by: { $0.value > $1.value }) {
-                  print("  \(emotion): \(String(format: "%.2f", score))")
-                }
-                
-                let topicClassifierInput = await TopicClassifierInput(text: transcript ?? "")
-                
-                let topic = try await self.topicClassifier.predict(topicClassifierInput).label
-                
-                try await self.saveRecordingInDB(
-                  audioData: audioData,
-                  recordingID: self.currentRecordingID!,
-                  emotion: dominantEmotion?.key.capitalized,
-                  topic: topic.capitalized,
-                  transcript: transcript
-                )
-                
-                continuation.yield(flag)
-                continuation.finish()
-              } catch {
-                continuation.finish(throwing: error)
-              }
+            let recordingURL = recorder.url
+            
+            do {
+              _ = try await self.processRecording(at: recordingURL, recordingID: recordingID)
+            } catch {
+              print("Failed to process recording: \(error)")
             }
             
-            try? AVAudioSession.sharedInstance().setActive(false)
-          },
-          encodeErrorDidOccur: { error in
-            continuation.finish(throwing: error)
+            await self.cleanupTempFile(at: recordingURL)
+            
             try? AVAudioSession.sharedInstance().setActive(false)
           }
-        )
-        
-        let url = createTemporaryURL()
-        
-        let recorder = try AVAudioRecorder(
-          url: url,
-          settings: [
-            AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 44100,
-            AVNumberOfChannelsKey: 1,
-            AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue,
-          ])
-        self.recorder = recorder
-        recorder.delegate = self.delegate
-        
-        continuation.onTermination = { [weak self, recorder = UncheckedSendable(recorder), url] _ in
-          recorder.wrappedValue.stop()
-          Task { @MainActor in
-            await self?.cleanupTempFile(at: url)
-          }
+        },
+        encodeErrorDidOccur: { error in
+          print("Recording encode error: \(error?.localizedDescription ?? "unknown")")
+          try? AVAudioSession.sharedInstance().setActive(false)
         }
-        
-        try AVAudioSession.sharedInstance().setCategory(
-          .playAndRecord, mode: .default, options: .defaultToSpeaker)
-        try AVAudioSession.sharedInstance().setActive(true)
-        self.recorder?.record(forDuration: 20)
-        
-      } catch {
-        continuation.finish(throwing: error)
-      }
+      )
+      
+      let url = createTemporaryURL()
+      
+      let recorder = try AVAudioRecorder(
+        url: url,
+        settings: [
+          AVFormatIDKey: Int(kAudioFormatLinearPCM),
+          AVSampleRateKey: 44100,
+          AVNumberOfChannelsKey: 1,
+          AVLinearPCMBitDepthKey: 16,
+          AVLinearPCMIsFloatKey: false,
+          AVLinearPCMIsBigEndianKey: false
+        ]
+      )
+      self.recorder = recorder
+      recorder.delegate = self.delegate
+      
+      let didStartRecording = recorder.record(forDuration: 20)
+      
+      print("Recording started successfully: \(didStartRecording)")
+      
+      return didStartRecording
+      
+    } catch {
+      print("Error in start(): \(error)")
+      await self.stop()
+      throw error
+    }
+  }
+  
+  private func processRecording(at recordingURL: URL, recordingID: UUID) async throws -> Bool {
+    let transcript = try await speechRecognizer.transcribeFile(recordingURL)
+    
+    print("Transcription result: \(transcript ?? "No transcript available")")
+    
+    let audioData = try Data(contentsOf: recordingURL)
+    
+    let windows = try AudioRecorder.extractAudioSamples(
+      from: recordingURL,
+      targetSampleCount: 15600
+    )
+    
+    var weightedVotes = [String: Double]()
+    var predictions = [(emotion: String, confidence: Double)]()
+    
+    for window in windows {
+      let input = EmotionClassifierInput(audioSamples: window)
+      let output = try await self.emotionClassifier.predict(input)
+      
+      let topEmotion = output.target
+      let confidence = output.targetProbability[topEmotion] ?? 0.0
+      
+      weightedVotes[topEmotion, default: 0] += confidence
+      predictions.append((emotion: topEmotion, confidence: confidence))
     }
     
-    for try await didFinish in stream {
-      return didFinish
+    let dominantEmotion = weightedVotes.max { $0.value < $1.value }
+    
+    let totalWeight = weightedVotes.values.reduce(0, +)
+    let winningWeightPercentage = (dominantEmotion?.value ?? 0) / totalWeight
+    let actualVoteCount = predictions.filter { $0.emotion == dominantEmotion?.key }.count
+    
+    print("=== Weighted Voting Results ===")
+    print("Dominant emotion: \(dominantEmotion?.key ?? "unknown")")
+    print("Weighted score: \(String(format: "%.2f", dominantEmotion?.value ?? 0))")
+    print("Actual vote count: \(actualVoteCount) out of \(predictions.count) windows")
+    print("Weighted percentage: \(String(format: "%.1f%%", winningWeightPercentage * 100))")
+    print("\nWeighted scores:")
+    for (emotion, score) in weightedVotes.sorted(by: { $0.value > $1.value }) {
+      print("  \(emotion): \(String(format: "%.2f", score))")
     }
-    throw CancellationError()
+    
+    let topicClassifierInput = TopicClassifierInput(text: transcript ?? "")
+    let topic = try await self.topicClassifier.predict(topicClassifierInput).label
+    
+    try self.saveRecordingInDB(
+      audioData: audioData,
+      recordingID: recordingID,
+      emotion: dominantEmotion?.key.capitalized,
+      topic: topic.capitalized,
+      transcript: transcript
+    )
+    
+    return true
   }
 }
 
@@ -357,8 +333,7 @@ private final class Delegate: NSObject, AVAudioRecorderDelegate, Sendable {
 
 extension AudioRecorder {
   private func createTemporaryURL() -> URL {
-    currentRecordingID = uuid()
-    let tempURL = fileManager.createTemporaryFileURL(withExtension: ".m4a", with: currentRecordingID!)
+    let tempURL = fileManager.createTemporaryFileURL(withExtension: "caf", with: currentRecordingID!)
     return tempURL
   }
   
@@ -520,7 +495,7 @@ extension AudioRecorder {
       let contents = try await fileManager.contentsOfDirectory(tempDir)
       let oneHourAgo = now.addingTimeInterval(-3600)
       
-      for url in contents where url.pathExtension == "m4a" {
+      for url in contents where url.pathExtension == "caf" {
         if let creationDate = try? await fileManager.creationDate(url),
            creationDate < oneHourAgo {
           try await fileManager.removeItem(url)
