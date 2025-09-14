@@ -42,7 +42,7 @@ func appDatabase() throws -> any DatabaseWriter {
   
   switch context {
   case .live:
-    let path = URL.documentsDirectory.appending(component: "VisualManDB.sqlite").path()
+    let path = URL.documentsDirectory.appending(component: "JournalManDB.sqlite").path()
     print("open \(path)")
     database = try DatabasePool(path: path, configuration: configuration)
   case .test, .preview:

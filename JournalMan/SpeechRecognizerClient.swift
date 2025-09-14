@@ -51,27 +51,17 @@ private actor SpeechRecognizer {
     request.shouldReportPartialResults = false
     request.requiresOnDeviceRecognition = true
     
-    let stream = AsyncThrowingStream<String, Error> { continuation in
+    return try await withCheckedThrowingContinuation { continuation in
       let task = recognizer.recognitionTask(with: request) { result, error in
         if let error {
-          continuation.finish(throwing: error)
-        } else if let result {
-          if result.isFinal {
-            continuation.yield(result.bestTranscription.formattedString)
-            continuation.finish()
-          }
+          continuation.resume(throwing: error)
+        } else if let result, result.isFinal {
+          continuation.resume(returning: result.bestTranscription.formattedString)
         }
       }
-      continuation.onTermination = { @Sendable _ in
-        task.cancel()
-      }
+
+      _ = task
     }
-    
-    for try await transcription in stream {
-      return transcription
-    }
-    
-    throw SpeechRecognizerClient.Failure.transcriptionFailed
   }
 }
 

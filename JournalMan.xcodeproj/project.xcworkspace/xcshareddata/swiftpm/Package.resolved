@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/pointfreeco/sharing-grdb",
       "state" : {
-        "revision" : "09e4c8a59dd670bdaec00c8c5007420a35236b58",
-        "version" : "0.7.0"
+        "revision" : "b8bbdc5762d6ae30fb1e45a780e134ae1953d284",
+        "version" : "0.8.0"
       }
     },
     {
@@ -114,8 +114,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/pointfreeco/swift-perception",
       "state" : {
-        "revision" : "59b00dfa5548b5b91ebbda6d94d6328d82ca00fe",
-        "version" : "2.0.6"
+        "revision" : "52bc59a5c7c3f0420c6c31d643d55d64b3f8c013",
+        "version" : "2.0.7"
       }
     },
     {
@@ -141,8 +141,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/pointfreeco/swift-structured-queries",
       "state" : {
-        "revision" : "adad5c6c5abe0c62f93c573de5be071043f621a8",
-        "version" : "0.17.0"
+        "revision" : "f576582c138311e442c564bd7a893e950765e46a",
+        "version" : "0.19.1"
       }
     },
     {

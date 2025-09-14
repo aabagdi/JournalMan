@@ -254,31 +254,50 @@ private class AudioRecorder {
   }
   
   private func processRecording(at recordingURL: URL, recordingID: UUID) async throws -> Bool {
+    print("🔍 [processRecording] Starting processing for recording: \(recordingID)")
+    print("🔍 [processRecording] Recording URL: \(recordingURL)")
+    
+    print("🔍 [processRecording] Starting transcription...")
     let transcript = try await speechRecognizer.transcribeFile(recordingURL)
+    print("✅ [processRecording] Transcription completed")
+    print("📝 Transcription result: \(transcript ?? "No transcript available")")
     
-    print("Transcription result: \(transcript ?? "No transcript available")")
-    
+    print("🔍 [processRecording] Loading audio data from file...")
+    print("🔍 [processRecording] File exists: \(FileManager.default.fileExists(atPath: recordingURL.path))")
     let audioData = try Data(contentsOf: recordingURL)
+    print("✅ [processRecording] Audio data loaded, size: \(audioData.count) bytes")
     
+    print("🔍 [processRecording] Extracting audio samples...")
     let windows = try AudioRecorder.extractAudioSamples(
       from: recordingURL,
       targetSampleCount: 15600
     )
+    print("✅ [processRecording] Audio samples extracted, window count: \(windows.count)")
     
     var weightedVotes = [String: Double]()
     var predictions = [(emotion: String, confidence: Double)]()
     
-    for window in windows {
+    print("🔍 [processRecording] Starting emotion classification for \(windows.count) windows...")
+    for (index, window) in windows.enumerated() {
+      print("🔍 [processRecording] Processing window \(index + 1)/\(windows.count)")
+      print("🔍 [processRecording] Window sample count: \(window.count)")
+      
       let input = EmotionClassifierInput(audioSamples: window)
+      
+      print("🔍 [processRecording] Calling emotion classifier predict...")
       let output = try await self.emotionClassifier.predict(input)
       
       let topEmotion = output.target
       let confidence = output.targetProbability[topEmotion] ?? 0.0
       
+      print("🔍 [processRecording] Window \(index + 1) - Emotion: \(topEmotion), Confidence: \(String(format: "%.3f", confidence))")
+      
       weightedVotes[topEmotion, default: 0] += confidence
       predictions.append((emotion: topEmotion, confidence: confidence))
     }
+    print("✅ [processRecording] Emotion classification completed")
     
+    print("🔍 [processRecording] Calculating dominant emotion...")
     let dominantEmotion = weightedVotes.max { $0.value < $1.value }
     
     let totalWeight = weightedVotes.values.reduce(0, +)
@@ -295,16 +314,31 @@ private class AudioRecorder {
       print("  \(emotion): \(String(format: "%.2f", score))")
     }
     
-    let topicClassifierInput = TopicClassifierInput(text: transcript ?? "")
-    let topic = try await self.topicClassifier.predict(topicClassifierInput).label
+    print("🔍 [processRecording] Starting topic classification...")
+    print("🔍 [processRecording] Transcript for topic: \(transcript?.prefix(100) ?? "none")")
+    
+    let topic = try await self.topicClassifier.predict(transcript ?? "")?.capitalized
+    
+    print("✅ [processRecording] Topic classification completed: \(topic ?? "nil")")
+    
+    // Save to database
+    print("🔍 [processRecording] Saving to database...")
+    print("🔍 [processRecording] Recording ID: \(recordingID)")
+    print("🔍 [processRecording] Emotion: \(dominantEmotion?.key.capitalized ?? "nil")")
+    print("🔍 [processRecording] Topic: \(topic ?? "nil")")
+    print("🔍 [processRecording] Transcript length: \(transcript?.count ?? 0)")
+    print("🔍 [processRecording] Audio data size: \(audioData.count)")
     
     try self.saveRecordingInDB(
       audioData: audioData,
       recordingID: recordingID,
       emotion: dominantEmotion?.key.capitalized,
-      topic: topic.capitalized,
+      topic: topic,
       transcript: transcript
     )
+    
+    print("✅ [processRecording] Database save completed")
+    print("🎉 [processRecording] Processing completed successfully for recording: \(recordingID)")
     
     return true
   }

@@ -18,8 +18,18 @@ struct EmotionClassifierClient {
 extension EmotionClassifierClient: DependencyKey {
   static let liveValue: Self = {
     let model = try! EmotionClassifier(configuration: .init())
+    
     return Self { input in
-      try await model.prediction(input: input)
+      try await withCheckedThrowingContinuation { continuation in
+        Task { @MainActor in
+          do {
+            let output = try model.prediction(input: input)
+            continuation.resume(returning: output)
+          } catch {
+            continuation.resume(throwing: error)
+          }
+        }
+      }
     }
   }()
   

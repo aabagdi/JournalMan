@@ -1,30 +1,34 @@
 //
-//  TopicClassifierClient.swift
+//  TopicClassifierClient.swift (Debug Version)
 //  JournalMan
 //
 //  Created by Aadit Bagdi on 8/27/25.
 //
 
 import Foundation
+import NaturalLanguage
 import Dependencies
 import DependenciesMacros
 import CoreML
 
 @DependencyClient
 struct TopicClassifierClient {
-  var predict: @Sendable (TopicClassifierInput) async throws -> (TopicClassifierOutput)
+  var predict: @Sendable (String) async throws -> (String?)
 }
 
 extension TopicClassifierClient: DependencyKey {
   static let liveValue: Self = {
-    let model = try! TopicClassifier(configuration: .init())
+    let mlModel = try! TopicClassifier(configuration: MLModelConfiguration()).model
+    let nlModel = try! UncheckedSendable(NLModel(mlModel: mlModel))
+    
     return Self { input in
-      try await model.prediction(input: input)
+      let unwrappedModel = nlModel.wrappedValue
+      let output = unwrappedModel.predictedLabel(for: input)
+      return output
     }
   }()
   
   static let testValue = Self { _ in
-    let features = try MLDictionaryFeatureProvider(dictionary: ["family": 0.9, "relationships": 0.1])
-    return await TopicClassifierOutput(features: features)
+    return "test"
   }
 }
