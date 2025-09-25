@@ -8,10 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		392EFE1A2E56D2AB00B1E60B /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 392EFE192E56D2AB00B1E60B /* ComposableArchitecture */; };
-		393ABED32E5A5BD800B2ECE6 /* SharingGRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 393ABED22E5A5BD800B2ECE6 /* SharingGRDB */; };
-		393ABED52E5A5BD800B2ECE6 /* SharingGRDBCore in Frameworks */ = {isa = PBXBuildFile; productRef = 393ABED42E5A5BD800B2ECE6 /* SharingGRDBCore */; };
-		393ABED72E5A5BD800B2ECE6 /* StructuredQueriesGRDB in Frameworks */ = {isa = PBXBuildFile; productRef = 393ABED62E5A5BD800B2ECE6 /* StructuredQueriesGRDB */; };
-		393ABED92E5A5BD800B2ECE6 /* StructuredQueriesGRDBCore in Frameworks */ = {isa = PBXBuildFile; productRef = 393ABED82E5A5BD800B2ECE6 /* StructuredQueriesGRDBCore */; };
+		39CFD8EF2E84F6C000F67C7A /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = 39CFD8EE2E84F6C000F67C7A /* SQLiteData */; };
+		39CFD8F12E84F6C000F67C7A /* SQLiteDataTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 39CFD8F02E84F6C000F67C7A /* SQLiteDataTestSupport */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,11 +29,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				393ABED52E5A5BD800B2ECE6 /* SharingGRDBCore in Frameworks */,
-				393ABED92E5A5BD800B2ECE6 /* StructuredQueriesGRDBCore in Frameworks */,
-				393ABED32E5A5BD800B2ECE6 /* SharingGRDB in Frameworks */,
+				39CFD8EF2E84F6C000F67C7A /* SQLiteData in Frameworks */,
+				39CFD8F12E84F6C000F67C7A /* SQLiteDataTestSupport in Frameworks */,
 				392EFE1A2E56D2AB00B1E60B /* ComposableArchitecture in Frameworks */,
-				393ABED72E5A5BD800B2ECE6 /* StructuredQueriesGRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -79,10 +75,8 @@
 			name = JournalMan;
 			packageProductDependencies = (
 				392EFE192E56D2AB00B1E60B /* ComposableArchitecture */,
-				393ABED22E5A5BD800B2ECE6 /* SharingGRDB */,
-				393ABED42E5A5BD800B2ECE6 /* SharingGRDBCore */,
-				393ABED62E5A5BD800B2ECE6 /* StructuredQueriesGRDB */,
-				393ABED82E5A5BD800B2ECE6 /* StructuredQueriesGRDBCore */,
+				39CFD8EE2E84F6C000F67C7A /* SQLiteData */,
+				39CFD8F02E84F6C000F67C7A /* SQLiteDataTestSupport */,
 			);
 			productName = JournalMan;
 			productReference = 392EFE062E56AF2600B1E60B /* JournalMan.app */;
@@ -114,7 +108,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				392EFE182E56D2AB00B1E60B /* XCRemoteSwiftPackageReference "swift-composable-architecture" */,
-				393ABED12E5A5BD800B2ECE6 /* XCRemoteSwiftPackageReference "sharing-grdb" */,
+				39CFD8ED2E84F6C000F67C7A /* XCRemoteSwiftPackageReference "sqlite-data" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 392EFE072E56AF2600B1E60B /* Products */;
@@ -374,12 +368,12 @@
 				minimumVersion = 1.22.0;
 			};
 		};
-		393ABED12E5A5BD800B2ECE6 /* XCRemoteSwiftPackageReference "sharing-grdb" */ = {
+		39CFD8ED2E84F6C000F67C7A /* XCRemoteSwiftPackageReference "sqlite-data" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/pointfreeco/sharing-grdb";
+			repositoryURL = "https://github.com/pointfreeco/sqlite-data";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 0.6.0;
+				minimumVersion = 1.0.0;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
@@ -390,25 +384,15 @@
 			package = 392EFE182E56D2AB00B1E60B /* XCRemoteSwiftPackageReference "swift-composable-architecture" */;
 			productName = ComposableArchitecture;
 		};
-		393ABED22E5A5BD800B2ECE6 /* SharingGRDB */ = {
+		39CFD8EE2E84F6C000F67C7A /* SQLiteData */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 393ABED12E5A5BD800B2ECE6 /* XCRemoteSwiftPackageReference "sharing-grdb" */;
-			productName = SharingGRDB;
+			package = 39CFD8ED2E84F6C000F67C7A /* XCRemoteSwiftPackageReference "sqlite-data" */;
+			productName = SQLiteData;
 		};
-		393ABED42E5A5BD800B2ECE6 /* SharingGRDBCore */ = {
+		39CFD8F02E84F6C000F67C7A /* SQLiteDataTestSupport */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 393ABED12E5A5BD800B2ECE6 /* XCRemoteSwiftPackageReference "sharing-grdb" */;
-			productName = SharingGRDBCore;
-		};
-		393ABED62E5A5BD800B2ECE6 /* StructuredQueriesGRDB */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 393ABED12E5A5BD800B2ECE6 /* XCRemoteSwiftPackageReference "sharing-grdb" */;
-			productName = StructuredQueriesGRDB;
-		};
-		393ABED82E5A5BD800B2ECE6 /* StructuredQueriesGRDBCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 393ABED12E5A5BD800B2ECE6 /* XCRemoteSwiftPackageReference "sharing-grdb" */;
-			productName = StructuredQueriesGRDBCore;
+			package = 39CFD8ED2E84F6C000F67C7A /* XCRemoteSwiftPackageReference "sqlite-data" */;
+			productName = SQLiteDataTestSupport;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

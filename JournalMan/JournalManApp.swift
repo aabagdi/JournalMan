@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 import ComposableArchitecture
 
 @main
@@ -19,11 +19,11 @@ struct JournalManApp: App {
   
   var body: some Scene {
     WindowGroup {
-      AudioRecorderView(
+      HomeView(
         store: Store(
-          initialState: AudioRecorderFeature.State()
+          initialState: HomeFeature.State()
         ) {
-          AudioRecorderFeature()
+          HomeFeature()
         }
       )
     }

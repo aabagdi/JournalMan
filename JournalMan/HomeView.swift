@@ -6,19 +6,33 @@
 //
 
 import SwiftUI
-import SharingGRDB
+import SQLiteData
 import ComposableArchitecture
 
 struct HomeView: View {
+  @Bindable var store: StoreOf<HomeFeature>
+  
   var body: some View {
-    CalendarView(
-      store: Store(
-        initialState: CalendarViewFeature.State()
-      ) {
-        CalendarViewFeature()
+    NavigationStack(
+      path: $store.scope(state: \.path, action: \.path)
+    ) {
+      CalendarView(
+        store: store.scope(
+          state: \.calendar,
+          action: \.calendar
+        )
+      )
+      .scrollIndicators(.never)
+      .navigationTitle("Calendar")
+      .navigationBarTitleDisplayMode(.large)
+    } destination: { store in
+      switch store.case {
+      case let .record(store):
+        AudioRecorderView(store: store)
+          .navigationTitle("Record Journal")
+          .navigationBarTitleDisplayMode(.inline)
       }
-    )
-    .scrollIndicators(.never)
+    }
   }
 }
 
@@ -26,5 +40,12 @@ struct HomeView: View {
   let _ = prepareDependencies {
     $0.defaultDatabase = try! appDatabase()
   }
-  HomeView()
+  
+  HomeView(
+    store: Store(
+      initialState: HomeFeature.State()
+    ) {
+      HomeFeature()
+    }
+  )
 }

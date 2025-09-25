@@ -7,7 +7,7 @@
 
 import SwiftUI
 import ComposableArchitecture
-import SharingGRDB
+import SQLiteData
 
 struct AudioRecorderView: View {
   let store: StoreOf<AudioRecorderFeature>

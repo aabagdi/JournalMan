@@ -6,7 +6,7 @@
 //
 
 import Foundation
-import SharingGRDB
+import SQLiteData
 
 @Table
 struct JournalEntry: Identifiable {
