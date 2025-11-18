@@ -13,3 +13,8 @@ enum AudioProcessingError: Error {
   case insufficientSamples
   case conversionFailed
 }
+
+enum AudioPlaybackError: Error {
+  case noEntryFound
+  case noDataFound
+}

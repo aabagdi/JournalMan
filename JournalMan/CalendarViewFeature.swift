@@ -101,7 +101,9 @@ struct CalendarViewFeature {
     try await database.read { db in
       @FetchAll var entries: [JournalEntry]
       let calendar = Calendar.current
-      return Set(entries.map { calendar.startOfDay(for: $0.date) })
+      let dates = Set(entries.map { calendar.startOfDay(for: $0.date) })
+      print(dates)
+      return dates
     }
   }
 }
