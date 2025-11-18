@@ -102,8 +102,8 @@ extension AudioRecorderClient: DependencyKey {
   static var liveValue: Self {
     let audioRecorder = AudioRecorder()
     return Self(
-      currentTime: { await audioRecorder.currentTime },
-      isRecording: { await audioRecorder.isRecording },
+      currentTime: { audioRecorder.currentTime },
+      isRecording: { audioRecorder.isRecording },
       requestRecordPermission: { await AudioRecorder.requestPermission() },
       startRecording: { try await audioRecorder.start() },
       stopRecording: { await audioRecorder.stop() }
@@ -111,14 +111,14 @@ extension AudioRecorderClient: DependencyKey {
   }
 }
 
-private class AudioRecorder {
-  var delegate: Delegate?
-  var recorder: AVAudioRecorder?
+private class AudioRecorder: @unchecked Sendable {
+  private let delegate = LockIsolated<Delegate?>(nil)
+  private let recorder = LockIsolated<AVAudioRecorder?>(nil)
   
-  private var currentRecordingID: UUID?
+  private let currentRecordingID = LockIsolated<UUID?>(nil)
   
   private var currentRecordingURL: URL? {
-    get { recorder?.url }
+    get { recorder.value?.url }
   }
   
   @Dependency(\.uuid) var uuid
@@ -131,14 +131,14 @@ private class AudioRecorder {
   
   var currentTime: TimeInterval? {
     guard
-      let recorder = self.recorder,
+      let recorder = self.recorder.value,
       recorder.isRecording
     else { return nil }
     return recorder.currentTime
   }
   
   var isRecording: Bool {
-    guard let recorder else { return false }
+    guard let recorder = self.recorder.value else { return false }
     return recorder.isRecording
   }
   
@@ -147,13 +147,13 @@ private class AudioRecorder {
   }
   
   func stop() async {
-    let wasRecording = self.recorder?.isRecording ?? false
-    let recordingURL = self.recorder?.url
-    let recordingID = self.currentRecordingID
+    let wasRecording = self.recorder.value?.isRecording ?? false
+    let recordingURL = self.recorder.value?.url
+    let recordingID = self.currentRecordingID.value
     
-    self.recorder?.stop()
-    self.recorder = nil
-    self.delegate = nil
+    self.recorder.value?.stop()
+    self.recorder.setValue(nil)
+    self.delegate.setValue(nil)
     
     if wasRecording, let url = recordingURL, let id = recordingID {
       do {
@@ -169,7 +169,7 @@ private class AudioRecorder {
     
     try? AVAudioSession.sharedInstance().setActive(false)
     
-    self.currentRecordingID = nil
+    self.currentRecordingID.setValue(nil)
   }
   
   func start() async throws -> Bool {
@@ -182,7 +182,7 @@ private class AudioRecorder {
       throw AudioRecorderClient.Failure.speechRecognitionNotAuthorized
     }
     
-    self.currentRecordingID = uuid()
+    self.currentRecordingID.setValue(uuid())
     
     do {
       try AVAudioSession.sharedInstance().setCategory(
@@ -192,7 +192,7 @@ private class AudioRecorder {
       )
       try AVAudioSession.sharedInstance().setActive(true)
       
-      self.delegate = Delegate(
+      self.delegate.setValue(Delegate(
         didFinishRecording: { [weak self] flag in
           guard let self else { return }
           
@@ -200,8 +200,8 @@ private class AudioRecorder {
           
           Task {
             guard flag,
-                  let recorder = await self.recorder,
-                  let recordingID = await self.currentRecordingID else {
+                  let recorder = self.recorder.value,
+                  let recordingID = self.currentRecordingID.value else {
               return
             }
             
@@ -222,7 +222,7 @@ private class AudioRecorder {
           print("Recording encode error: \(error?.localizedDescription ?? "unknown")")
           try? AVAudioSession.sharedInstance().setActive(false)
         }
-      )
+      ))
       
       let url = createTemporaryURL()
       
@@ -237,8 +237,8 @@ private class AudioRecorder {
           AVLinearPCMIsBigEndianKey: false
         ]
       )
-      self.recorder = recorder
-      recorder.delegate = self.delegate
+      self.recorder.setValue(recorder)
+      recorder.delegate = self.delegate.value
       
       let didStartRecording = recorder.record(forDuration: 20)
       
@@ -313,7 +313,7 @@ private final class Delegate: NSObject, AVAudioRecorderDelegate, Sendable {
 
 extension AudioRecorder {
   private func createTemporaryURL() -> URL {
-    let tempURL = fileManager.createTemporaryFileURL(withExtension: "caf", with: currentRecordingID!)
+    let tempURL = fileManager.createTemporaryFileURL(withExtension: "caf", with: currentRecordingID.value!)
     return tempURL
   }
   

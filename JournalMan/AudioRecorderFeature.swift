@@ -46,7 +46,7 @@ struct AudioRecorderFeature {
               if started {
                 await send(.recordingStarted)
                 
-                for await _ in await clock.timer(interval: .seconds(0.1)) {
+                for await _ in clock.timer(interval: .seconds(0.1)) {
                   let currentTime = await audioRecorder.currentTime()
                   await send(.updateCurrentTime(currentTime))
                   

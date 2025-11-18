@@ -8,22 +8,21 @@
 import Foundation
 import ComposableArchitecture
 import Dependencies
+import SQLiteData
 
 @Reducer
 struct CalendarViewFeature {
   @ObservableState
   struct State: Equatable {
     var currentMonth: Date
-    var selectedDate: Date
     var today: Date
+    var datesWithEntries: Set<Date> = []
     
     init(
       currentMonth: Date = Date(),
-      selectedDate: Date = Date(),
       today: Date = Date()
     ) {
       self.currentMonth = currentMonth
-      self.selectedDate = selectedDate
       self.today = today
     }
     
@@ -56,12 +55,15 @@ struct CalendarViewFeature {
     case nextMonthButtonTapped
     case prevMonthButtonTapped
     case todayButtonTapped
-    case dateTapped(Date)
+    case recordButtonTapped
     case onAppear
+    case reloadEntries
+    case datesWithEntriesLoaded(Set<Date>)
   }
   
   @Dependency(\.date.now) var now
   @Dependency(\.calendar) var calendar
+  @Dependency(\.defaultDatabase) var database
   
   var body: some Reducer<State, Action> {
     Reduce { state, action in
@@ -76,19 +78,30 @@ struct CalendarViewFeature {
         
       case .todayButtonTapped:
         state.currentMonth = now
-        state.selectedDate = now
         return .none
         
-      case let .dateTapped(date):
-        if !state.isDateInFuture(date: date) {
-          state.selectedDate = date
-        }
+      case .recordButtonTapped:
         return .none
         
-      case .onAppear:
+      case .onAppear, .reloadEntries:
         state.today = now
+        return .run { send in
+          let dates = try await loadDatesWithEntries()
+          await send(.datesWithEntriesLoaded(dates))
+        }
+        
+      case let .datesWithEntriesLoaded(dates):
+        state.datesWithEntries = dates
         return .none
       }
+    }
+  }
+  
+  private func loadDatesWithEntries() async throws -> Set<Date> {
+    try await database.read { db in
+      @FetchAll var entries: [JournalEntry]
+      let calendar = Calendar.current
+      return Set(entries.map { calendar.startOfDay(for: $0.date) })
     }
   }
 }
@@ -102,7 +115,12 @@ extension CalendarViewFeature.State {
     Calendar.current.isDate(date, equalTo: currentMonth, toGranularity: .month)
   }
   
-  func isDateInFuture(date: Date) -> Bool {
-    Calendar.current.startOfDay(for: date) > Calendar.current.startOfDay(for: today)
+  func isDateToday(date: Date) -> Bool {
+    Calendar.current.isDate(date, inSameDayAs: today)
+  }
+  
+  func hasEntry(for date: Date) -> Bool {
+    let startOfDay = Calendar.current.startOfDay(for: date)
+    return datesWithEntries.contains(startOfDay)
   }
 }

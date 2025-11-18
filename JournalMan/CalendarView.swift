@@ -21,6 +21,8 @@ struct CalendarView: View {
       
       calendarGrid
       
+      recordButton
+      
       Spacer()
     }
     .padding(.top)
@@ -104,18 +106,34 @@ struct CalendarView: View {
     if let date = date {
       CalendarCellView(
         date: date,
-        isSelected: store.state.isSameDay(date: date, compareDate: store.selectedDate),
-        isToday: store.state.isSameDay(date: date, compareDate: store.today),
+        isToday: store.state.isDateToday(date: date),
         isCurrentMonth: store.state.isSameMonth(date: date),
-        isFutureDate: store.state.isDateInFuture(date: date)
+        hasEntry: store.state.hasEntry(for: date)
       )
-      .onTapGesture {
-        store.send(.dateTapped(date), animation: .spring())
-      }
     } else {
       Color.clear
         .frame(width: 40, height: 40)
     }
+  }
+  
+  private var recordButton: some View {
+    Button {
+      store.send(.recordButtonTapped)
+    } label: {
+      HStack {
+        Image(systemName: "mic.fill")
+          .font(.title3)
+        Text("Record Journal Entry")
+          .font(.headline)
+      }
+      .frame(maxWidth: .infinity)
+      .padding()
+      .background(Color.accentColor)
+      .foregroundColor(.white)
+      .cornerRadius(12)
+    }
+    .padding(.horizontal)
+    .padding(.top, 10)
   }
 }
 

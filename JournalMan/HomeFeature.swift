@@ -33,11 +33,13 @@ struct HomeFeature {
     
     Reduce { state, action in
       switch action {
-      case .calendar(.dateTapped(let date)):
-        if !state.calendar.isDateInFuture(date: date) {
-          state.path.append(.record(AudioRecorderFeature.State()))
-        }
+      case .calendar(.recordButtonTapped):
+        state.path.append(.record(AudioRecorderFeature.State()))
         return .none
+        
+      case .path(.popFrom):
+        // Reload entries when user comes back from recording
+        return .send(.calendar(.reloadEntries))
         
       case .path:
         return .none
@@ -49,3 +51,5 @@ struct HomeFeature {
     .forEach(\.path, action: \.path)
   }
 }
+
+extension HomeFeature.Path.State: Equatable { }

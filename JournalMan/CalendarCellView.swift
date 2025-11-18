@@ -9,10 +9,9 @@ import SwiftUI
 
 struct CalendarCellView: View {
   let date: Date
-  let isSelected: Bool
   let isToday: Bool
   let isCurrentMonth: Bool
-  let isFutureDate: Bool
+  let hasEntry: Bool
   
   private var dayNumber: String {
     let formatter = DateFormatter()
@@ -22,13 +21,17 @@ struct CalendarCellView: View {
   
   var body: some View {
     ZStack {
-      if isSelected {
+      if isToday && hasEntry {
         Circle()
           .fill(Color.accentColor)
           .frame(width: 40, height: 40)
       } else if isToday {
         Circle()
           .strokeBorder(Color.accentColor, lineWidth: 2)
+          .frame(width: 40, height: 40)
+      } else if hasEntry {
+        Circle()
+          .fill(Color.accentColor.opacity(0.7))
           .frame(width: 40, height: 40)
       }
       
@@ -38,25 +41,23 @@ struct CalendarCellView: View {
         .frame(width: 40, height: 40)
     }
     .opacity(isCurrentMonth ? 1.0 : 0.3)
-    .allowsHitTesting(!isFutureDate)
+    .allowsHitTesting(isToday)
   }
   
   private var textColor: Color {
-    if isFutureDate {
-      return .secondary.opacity(0.5)
-    } else if isSelected {
+    if isToday && hasEntry {
       return .white
     } else if isToday {
-      return .accentColor
+      return .black
     } else if isCurrentMonth {
-      return .primary
+      return .gray
     } else {
       return .secondary
     }
   }
   
   private var opacity: Double {
-    if isFutureDate {
+    if !isToday {
       return 0.4
     } else if isCurrentMonth {
       return 1.0
