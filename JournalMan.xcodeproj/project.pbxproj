@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		392EFE1A2E56D2AB00B1E60B /* ComposableArchitecture in Frameworks */ = {isa = PBXBuildFile; productRef = 392EFE192E56D2AB00B1E60B /* ComposableArchitecture */; };
+		399CCB772ECCFB1E008E6823 /* SQLiteDataTestSupport in Frameworks */ = {isa = PBXBuildFile; productRef = 39CFD8F02E84F6C000F67C7A /* SQLiteDataTestSupport */; };
 		39CFD8EF2E84F6C000F67C7A /* SQLiteData in Frameworks */ = {isa = PBXBuildFile; productRef = 39CFD8EE2E84F6C000F67C7A /* SQLiteData */; };
 /* End PBXBuildFile section */
 
@@ -28,6 +29,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				399CCB772ECCFB1E008E6823 /* SQLiteDataTestSupport in Frameworks */,
 				39CFD8EF2E84F6C000F67C7A /* SQLiteData in Frameworks */,
 				392EFE1A2E56D2AB00B1E60B /* ComposableArchitecture in Frameworks */,
 			);

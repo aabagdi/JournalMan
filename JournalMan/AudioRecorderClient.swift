@@ -490,7 +490,7 @@ extension AudioRecorder {
   private func saveRecordingInDB(audioData: Data, recordingID: UUID, emotion: String?, topic: String?, transcript: String?) throws {
     let journalEntry = JournalEntry(
       id: recordingID,
-      date: now,
+      date: now.startOfDay(),
       emotion: emotion,
       topic: topic,
       transcript: transcript

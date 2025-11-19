@@ -13,7 +13,8 @@ import SQLiteData
 
 @DependencyClient
 struct AudioPlayerClient {
-  var play: @Sendable (_ date: Date) async throws -> Bool
+  var play: @Sendable (_ date: Date) async throws -> Void
+  var pause: @Sendable () -> Void
   private var getURLfromDate: @Sendable (_ date: Date) throws -> URL
 }
 
@@ -21,15 +22,17 @@ extension AudioPlayerClient: TestDependencyKey {
   static let previewValue = Self(
     play: { _ in
       try await Task.sleep(for: .seconds(5))
-      return true
+    },
+    
+    pause: { _ in
+      try await Task.sleep(for: .seconds(5))
     },
     
     getURLfromDate: { _ in
       URL(fileURLWithPath: "/tmp/preview_audio.m4a")
     }
-    
   )
-
+  
   static let testValue = Self()
 }
 
@@ -43,52 +46,78 @@ extension DependencyValues {
 extension AudioPlayerClient: DependencyKey {
   static let liveValue: AudioPlayerClient = {
     @Dependency(\.defaultDatabase) var database
-    @Dependency(\.calendar) var calendar
     @Dependency(FileManagerClient.self) var fileManager
     
     let getURLfromDate: @Sendable (Date) throws -> URL = { date in
-      @FetchOne(JournalEntry.where { calendar.compare($0.date, to: date, toGranularity: .day) == .orderedSame }) var entryToday: JournalEntry?
-      
-      guard let entryToday else { throw AudioPlaybackError.noEntryFound }
-      
-      @FetchOne(JournalEntryAsset.where { $0.assetID == entryToday.id }) var assetToday: JournalEntryAsset?
-      
-      guard let assetToday else { throw AudioPlaybackError.noDataFound }
-      
-      let tempURL = fileManager.createTemporaryFileURL(withExtension: "caf", with: entryToday.id)
-      
-      try? assetToday.audioData?.write(to: tempURL)
-      
-      return tempURL
+      try database.read { db in
+        let entryAndAsset = try JournalEntry
+          .where { $0.date.eq(date.startOfDay()) }
+          .leftJoin(JournalEntryAsset.all) { $0.id.eq($1.assetID) }
+          .fetchOne(db)
+        
+        let tempURL = fileManager.createTemporaryFileURL(withExtension: .caf, with: entryAndAsset.1.assetID)
+        
+        entryAndAsset.1.audioData.write(to: tempURL)
+        
+        return tempURL
+      }
     }
+    
+    actor PlayerState {
+      var currentDelegate: Delegate?
+      
+      func setDelegate(_ delegate: Delegate) {
+        currentDelegate = delegate
+      }
+      
+      func pause() {
+        currentDelegate?.player.pause()
+      }
+      
+      func clear() {
+        currentDelegate = nil
+      }
+    }
+    
+    let playerState = PlayerState()
     
     return Self(
       play: { date in
         let url = try getURLfromDate(date)
-        let success = try await withCheckedThrowingContinuation { continuation in
+        let stream = AsyncThrowingStream<Bool, any Error> { continuation in
           do {
-            let delegate = try Delegate(
+            let delegate = Delegate(
               url: url,
               didFinishPlaying: { success in
-                continuation.resume(returning: success)
+                continuation.yield(success)
+                continuation.finish()
+                Task { await playerState.clear() }
               },
               decodeErrorDidOccur: { error in
-                if let error {
-                  continuation.resume(throwing: error)
-                } else {
-                  continuation.resume(returning: false)
-                }
+                continuation.finish(throwing: error)
+                Task { await playerState.clear() }
               }
             )
+            
+            Task { await playerState.setDelegate(delegate) }
             delegate.player.play()
+            
+            continuation.onTermination { _ in
+              delegate.player.stop()
+              Task { await playerState.clear() }
+            }
           } catch {
-            continuation.resume(throwing: error)
+            continuation.finish(throwing: error)
           }
         }
         
-        try? await fileManager.removeItem(url)
-        return success
+        return try await stream.first(where: { _ in true }) ?? false
       },
+      
+      pause: {
+        Task { await playerState.pause() }
+      },
+      
       getURLfromDate: getURLfromDate
     )
   }()
@@ -98,7 +127,7 @@ private final class Delegate: NSObject, AVAudioPlayerDelegate, Sendable {
   let didFinishPlaying: @Sendable (Bool) -> Void
   let decodeErrorDidOccur: @Sendable (Error?) -> Void
   let player: AVAudioPlayer
-
+  
   init(
     url: URL,
     didFinishPlaying: @escaping @Sendable (Bool) -> Void,
@@ -110,11 +139,11 @@ private final class Delegate: NSObject, AVAudioPlayerDelegate, Sendable {
     super.init()
     self.player.delegate = self
   }
-
+  
   func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
     self.didFinishPlaying(flag)
   }
-
+  
   func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: (any Error)?) {
     self.decodeErrorDidOccur(error)
   }

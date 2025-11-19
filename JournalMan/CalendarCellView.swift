@@ -41,7 +41,7 @@ struct CalendarCellView: View {
         .frame(width: 40, height: 40)
     }
     .opacity(isCurrentMonth ? 1.0 : 0.3)
-    .allowsHitTesting(isToday)
+    .allowsHitTesting(isToday || hasEntry)
   }
   
   private var textColor: Color {

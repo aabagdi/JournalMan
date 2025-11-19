@@ -21,7 +21,7 @@ struct JournalEntry: Identifiable {
 struct JournalEntryAsset: Hashable, Identifiable {
   @Column(primaryKey: true)
   let assetID: JournalEntry.ID
-  var audioData: Data?
+  var audioData: Data
   var id: JournalEntry.ID { assetID }
 }
 
@@ -73,7 +73,7 @@ func appDatabase() throws -> any DatabaseWriter {
     """
       CREATE TABLE "JournalEntryAssets" (
         "assetID" TEXT PRIMARY KEY NOT NULL REFERENCES "JournalEntries"("id") ON DELETE CASCADE,
-        "audioData" BLOB 
+        "audioData" BLOB NOT NULL
       ) STRICT
     """
     )
