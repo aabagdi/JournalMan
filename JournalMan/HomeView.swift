@@ -31,6 +31,11 @@ struct HomeView: View {
         AudioRecorderView(store: store)
           .navigationTitle("Record Journal")
           .navigationBarTitleDisplayMode(.inline)
+          
+      case let .player(store):
+        AudioPlayerView(store: store)
+          .navigationTitle("Journal Entry")
+          .navigationBarTitleDisplayMode(.inline)
       }
     }
   }

@@ -24,6 +24,11 @@ struct AudioRecorderFeature {
     case recordingStarted
     case recordingStopped
     case updateCurrentTime(TimeInterval?)
+    case delegate(Delegate)
+    
+    enum Delegate: Equatable {
+      case recordingCompleted
+    }
   }
   
   @Dependency(AudioRecorderClient.self) var audioRecorder
@@ -95,10 +100,13 @@ struct AudioRecorderFeature {
         state.currentTime = nil
         state.animationAmount = 1.0
         state.fadeInOut = false
-        return .none
+        return .send(.delegate(.recordingCompleted))
         
       case let .updateCurrentTime(time):
         state.currentTime = time
+        return .none
+        
+      case .delegate(_):
         return .none
       }
     }

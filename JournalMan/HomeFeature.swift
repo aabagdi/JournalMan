@@ -13,6 +13,11 @@ struct HomeFeature {
   @Reducer
   enum Path {
     case record(AudioRecorderFeature)
+    case player(AudioPlayerFeature)
+  }
+  
+  enum CancelID {
+    case path
   }
   
   @ObservableState
@@ -37,8 +42,33 @@ struct HomeFeature {
         state.path.append(.record(AudioRecorderFeature.State()))
         return .none
         
+      case let .calendar(.dateTapped(date)):
+        if state.calendar.hasEntry(for: date) {
+          state.path.append(.player(AudioPlayerFeature.State(
+            date: date,
+            currentSeekPosition: nil,
+            isPlaying: false
+          )))
+        } else {
+          state.path.append(.record(AudioRecorderFeature.State()))
+        }
+        return .none
+        
+      case .path(.element(_, .record(.delegate(.recordingCompleted)))):
+        state.path.removeLast()
+        return .concatenate(
+          .send(.calendar(.reloadEntries)),
+          .cancel(id: CancelID.path)
+        )
+        
+      case .path(.element(_, .player(.delegate(.entryDeleted)))):
+        state.path.removeLast()
+        return .concatenate(
+          .send(.calendar(.reloadEntries)),
+          .cancel(id: CancelID.path)
+        )
+        
       case .path(.popFrom):
-        // Reload entries when user comes back from recording
         return .send(.calendar(.reloadEntries))
         
       case .path:

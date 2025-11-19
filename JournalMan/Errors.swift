@@ -15,6 +15,7 @@ enum AudioProcessingError: Error {
 }
 
 enum AudioPlaybackError: Error {
-  case noEntryFound
-  case noDataFound
+  case noAssetFound
+  case unknownDecodeError
+  case playbackFailed
 }

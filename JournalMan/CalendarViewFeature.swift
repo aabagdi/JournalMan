@@ -56,6 +56,7 @@ struct CalendarViewFeature {
     case prevMonthButtonTapped
     case todayButtonTapped
     case recordButtonTapped
+    case dateTapped(Date)
     case onAppear
     case reloadEntries
     case datesWithEntriesLoaded(Set<Date>)
@@ -81,6 +82,9 @@ struct CalendarViewFeature {
         return .none
         
       case .recordButtonTapped:
+        return .none
+        
+      case .dateTapped:
         return .none
         
       case .onAppear, .reloadEntries:

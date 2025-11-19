@@ -13,24 +13,24 @@ import SQLiteData
 
 @DependencyClient
 struct AudioPlayerClient {
-  var play: @Sendable (_ date: Date) async throws -> Void
+  var play: @Sendable (_ date: Date) async throws -> Bool
   var pause: @Sendable () -> Void
-  private var getURLfromDate: @Sendable (_ date: Date) throws -> URL
+  var stop: @Sendable () -> Void
+  var seek: @Sendable (_ position: TimeInterval) -> Void
 }
 
 extension AudioPlayerClient: TestDependencyKey {
   static let previewValue = Self(
     play: { _ in
       try await Task.sleep(for: .seconds(5))
+      return true
     },
     
-    pause: { _ in
-      try await Task.sleep(for: .seconds(5))
-    },
+    pause: { },
     
-    getURLfromDate: { _ in
-      URL(fileURLWithPath: "/tmp/preview_audio.m4a")
-    }
+    stop: { },
+    
+    seek: { _ in }
   )
   
   static let testValue = Self()
@@ -49,18 +49,25 @@ extension AudioPlayerClient: DependencyKey {
     @Dependency(FileManagerClient.self) var fileManager
     
     let getURLfromDate: @Sendable (Date) throws -> URL = { date in
-      try database.read { db in
-        let entryAndAsset = try JournalEntry
+      let result: (JournalEntry, JournalEntryAsset?) = try database.read { db in
+        try JournalEntry
           .where { $0.date.eq(date.startOfDay()) }
           .leftJoin(JournalEntryAsset.all) { $0.id.eq($1.assetID) }
-          .fetchOne(db)
-        
-        let tempURL = fileManager.createTemporaryFileURL(withExtension: .caf, with: entryAndAsset.1.assetID)
-        
-        entryAndAsset.1.audioData.write(to: tempURL)
-        
-        return tempURL
+          .fetchOne(db)!
       }
+      
+      guard let asset = result.1 else {
+        throw AudioPlaybackError.noAssetFound
+      }
+      
+      let tempURL = fileManager.createTemporaryFileURL(
+        withExtension: ".caf",
+        with: asset.assetID
+      )
+      
+      try asset.audioData.write(to: tempURL)
+      
+      return tempURL
     }
     
     actor PlayerState {
@@ -74,6 +81,14 @@ extension AudioPlayerClient: DependencyKey {
         currentDelegate?.player.pause()
       }
       
+      func stop() {
+        currentDelegate?.player.stop()
+      }
+      
+      func seek(to position: TimeInterval) {
+        currentDelegate?.player.currentTime = position
+      }
+      
       func clear() {
         currentDelegate = nil
       }
@@ -83,42 +98,43 @@ extension AudioPlayerClient: DependencyKey {
     
     return Self(
       play: { date in
-        let url = try getURLfromDate(date)
-        let stream = AsyncThrowingStream<Bool, any Error> { continuation in
+        let url: URL = try getURLfromDate(date)
+        
+        let result: Bool = try await withCheckedThrowingContinuation { continuation in
           do {
-            let delegate = Delegate(
+            let delegate = try Delegate(
               url: url,
               didFinishPlaying: { success in
-                continuation.yield(success)
-                continuation.finish()
+                continuation.resume(returning: success)
                 Task { await playerState.clear() }
               },
               decodeErrorDidOccur: { error in
-                continuation.finish(throwing: error)
+                continuation.resume(throwing: error ?? AudioPlaybackError.unknownDecodeError)
                 Task { await playerState.clear() }
               }
             )
             
             Task { await playerState.setDelegate(delegate) }
             delegate.player.play()
-            
-            continuation.onTermination { _ in
-              delegate.player.stop()
-              Task { await playerState.clear() }
-            }
           } catch {
-            continuation.finish(throwing: error)
+            continuation.resume(throwing: error)
           }
         }
         
-        return try await stream.first(where: { _ in true }) ?? false
+        return result
       },
       
       pause: {
         Task { await playerState.pause() }
       },
       
-      getURLfromDate: getURLfromDate
+      stop: {
+        Task { await playerState.stop() }
+      },
+      
+      seek: { position in
+        Task { await playerState.seek(to: position) }
+      }
     )
   }()
 }

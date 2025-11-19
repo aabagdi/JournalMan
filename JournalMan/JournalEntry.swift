@@ -9,7 +9,7 @@ import Foundation
 import SQLiteData
 
 @Table
-struct JournalEntry: Identifiable {
+struct JournalEntry: Identifiable, Equatable {
   var id: UUID
   var date: Date
   var emotion: String?

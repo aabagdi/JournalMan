@@ -103,13 +103,31 @@ struct CalendarView: View {
   private func calendarDayView(at index: Int) -> some View {
     let date = store.calendarDays[index]
     
-    if let date = date {
-      CalendarCellView(
-        date: date,
-        isToday: store.state.isDateToday(date: date),
-        isCurrentMonth: store.state.isSameMonth(date: date),
-        hasEntry: store.state.hasEntry(for: date)
-      )
+    if let date {
+      let isToday = store.state.isDateToday(date: date)
+      let hasEntry = store.state.hasEntry(for: date)
+      let isTappable = isToday || hasEntry
+      
+      if isTappable {
+        Button {
+          store.send(.dateTapped(date))
+        } label: {
+          CalendarCellView(
+            date: date,
+            isToday: isToday,
+            isCurrentMonth: store.state.isSameMonth(date: date),
+            hasEntry: hasEntry
+          )
+        }
+        .buttonStyle(.plain)
+      } else {
+        CalendarCellView(
+          date: date,
+          isToday: isToday,
+          isCurrentMonth: store.state.isSameMonth(date: date),
+          hasEntry: hasEntry
+        )
+      }
     } else {
       Color.clear
         .frame(width: 40, height: 40)
