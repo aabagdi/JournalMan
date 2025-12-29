@@ -10,6 +10,8 @@ import SQLiteData
 import ComposableArchitecture
 
 struct CalendarView: View {
+  @Dependency(JournalStreakClient.self) var journalStreak
+  
   let store: StoreOf<CalendarViewFeature>
   let days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   
@@ -25,10 +27,12 @@ struct CalendarView: View {
       
       Spacer()
     }
-    .padding(.top)
-    .task {
-      await store.send(.reloadEntries).finish()
+    .toolbar {
+      let info = journalStreak.getStreakInfo()
+      Text("Longest streak: \(String(info.currentStreak))")
+        .padding()
     }
+    .padding(.top)
   }
   
   // MARK: - Subviews

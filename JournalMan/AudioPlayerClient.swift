@@ -49,7 +49,7 @@ extension AudioPlayerClient: DependencyKey {
     @Dependency(FileManagerClient.self) var fileManager
     
     let getURLfromDate: @Sendable (Date) throws -> URL = { date in
-      print("🔍 Fetching audio for date: \(date)")
+      print("Fetching audio for date: \(date)")
       
       let result: (JournalEntry, JournalEntryAsset?) = try database.read { db in
         try JournalEntry
@@ -58,17 +58,17 @@ extension AudioPlayerClient: DependencyKey {
           .fetchOne(db)!
       }
       
-      print("📊 Database query result - Entry: \(result.0.id), Asset exists: \(result.1 != nil)")
+      print("Database query result - Entry: \(result.0.id), Asset exists: \(result.1 != nil)")
       
       guard let asset = result.1 else {
-        print("❌ No audio asset found in database for date: \(date)")
+        print("No audio asset found in database for date: \(date)")
         throw AudioPlaybackError.noAssetFound
       }
       
-      print("✅ Found audio asset with ID: \(asset.assetID), data size: \(asset.audioData.count) bytes")
+      print("Found audio asset with ID: \(asset.assetID), data size: \(asset.audioData.count) bytes")
       
       guard !asset.audioData.isEmpty else {
-        print("❌ Audio data is empty!")
+        print("Audio data is empty!")
         throw AudioPlaybackError.noAssetFound
       }
       
@@ -77,22 +77,22 @@ extension AudioPlayerClient: DependencyKey {
         with: asset.assetID
       )
       
-      print("📝 Writing audio data to: \(tempURL.path)")
-      print("📁 Temp directory: \(fileManager.temporaryDirectory().path)")
+      print("Writing audio data to: \(tempURL.path)")
+      print("Temp directory: \(fileManager.temporaryDirectory().path)")
       
       try asset.audioData.write(to: tempURL, options: .atomic)
       
       guard fileManager.fileExists(tempURL) else {
-        print("❌ File was not written successfully to: \(tempURL.path)")
+        print("File was not written successfully to: \(tempURL.path)")
         throw AudioPlaybackError.fileWriteFailed
       }
       
       if let attributes = try? FileManager.default.attributesOfItem(atPath: tempURL.path),
          let fileSize = attributes[.size] as? Int {
-        print("✅ Audio file written successfully. File size: \(fileSize) bytes")
+        print("Audio file written successfully. File size: \(fileSize) bytes")
         
         if fileSize != asset.audioData.count {
-          print("⚠️ Warning: File size (\(fileSize)) doesn't match data size (\(asset.audioData.count))")
+          print("Warning: File size (\(fileSize)) doesn't match data size (\(asset.audioData.count))")
         }
       }
       
@@ -191,19 +191,19 @@ private final class Delegate: NSObject, AVAudioPlayerDelegate, Sendable {
     )
     try AVAudioSession.sharedInstance().setActive(true)
     
-    print("🎵 Initializing AVAudioPlayer with file: \(url.path)")
+    print("Initializing AVAudioPlayer with file: \(url.path)")
     self.player = try AVAudioPlayer(contentsOf: url)
-    print("🎵 AVAudioPlayer created successfully. Duration: \(player.duration)s")
+    print("AVAudioPlayer created successfully. Duration: \(player.duration)s")
     
     super.init()
     self.player.delegate = self
     
     guard self.player.prepareToPlay() else {
-      print("❌ Failed to prepare audio player")
+      print("Failed to prepare audio player")
       throw AudioPlaybackError.playbackFailed
     }
     
-    print("✅ AVAudioPlayer prepared and ready to play")
+    print("AVAudioPlayer prepared and ready to play")
   }
   
   func cancel() {

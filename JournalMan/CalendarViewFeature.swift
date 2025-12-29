@@ -88,14 +88,19 @@ struct CalendarViewFeature {
         return .none
         
       case .onAppear, .reloadEntries:
+        print("Reloading entries...")
         state.today = now
         return .run { send in
           let dates = try await loadDatesWithEntries()
+          print("Database returned \(dates.count) dates")
           await send(.datesWithEntriesLoaded(dates))
         }
         
       case let .datesWithEntriesLoaded(dates):
+        print("Loaded \(dates.count) dates with entries: \(dates)")
+        print("Today is: \(calendar.startOfDay(for: now))")
         state.datesWithEntries = dates
+        print("State now has \(state.datesWithEntries.count) dates")
         return .none
       }
     }
@@ -106,7 +111,9 @@ struct CalendarViewFeature {
       @FetchAll var entries: [JournalEntry]
       let calendar = Calendar.current
       let dates = Set(entries.map { calendar.startOfDay(for: $0.date) })
-      print(dates)
+      print("Raw entries from DB: \(entries.count)")
+      print("ntry dates: \(entries.map { $0.date })")
+      print("Start of day dates: \(dates)")
       return dates
     }
   }

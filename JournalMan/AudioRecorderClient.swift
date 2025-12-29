@@ -129,6 +129,7 @@ private class AudioRecorder: @unchecked Sendable {
   @Dependency(SentimentAnalyzerClient.self) var sentimentAnalyzer
   @Dependency(FileManagerClient.self) var fileManager
   @Dependency(SpeechRecognizerClient.self) var speechRecognizer
+  @Dependency(JournalStreakClient.self) var journalStreak
   
   var currentTime: TimeInterval? {
     guard
@@ -276,6 +277,8 @@ private class AudioRecorder: @unchecked Sendable {
       topic: topic,
       transcript: transcript
     )
+    
+    let _ = journalStreak.recordEntry(now)
     
     return true
   }

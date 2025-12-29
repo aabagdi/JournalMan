@@ -9,10 +9,24 @@ import Foundation
 import Dependencies
 import DependenciesMacros
 
+struct StreakInfo: Equatable, Sendable {
+  var currentStreak: Int
+  var longestStreak: Int
+  var lastEntryDate: Date?
+  
+  var isActive: Bool {
+    guard let lastDate = lastEntryDate else { return false }
+    return Calendar.current.isDateInToday(lastDate) || Calendar.current.isDateInYesterday(lastDate)
+  }
+}
+
 @DependencyClient
 struct JournalStreakClient {
-  var setStreak: @Sendable (Int) -> Void
-  var getStreak: @Sendable () -> Int = { 0 }
+  var recordEntry: @Sendable (Date) -> StreakInfo = { _ in StreakInfo(currentStreak: 0, longestStreak: 0) }
+  
+  var getStreakInfo: @Sendable () -> StreakInfo = { StreakInfo(currentStreak: 0, longestStreak: 0) }
+  
+  var resetStreak: @Sendable () -> Void
 }
 
 extension JournalStreakClient: TestDependencyKey {
@@ -20,14 +34,15 @@ extension JournalStreakClient: TestDependencyKey {
   
   static var previewValue: Self {
     Self(
-      setStreak: { _ in },
-      getStreak: { 3 }
+      recordEntry: { _ in StreakInfo(currentStreak: 3, longestStreak: 7, lastEntryDate: Date()) },
+      getStreakInfo: { StreakInfo(currentStreak: 3, longestStreak: 7, lastEntryDate: Date()) },
+      resetStreak: { }
     )
   }
 }
 
 extension DependencyValues {
-  var userDefaults: JournalStreakClient {
+  var journalStreak: JournalStreakClient {
     get { self[JournalStreakClient.self] }
     set { self[JournalStreakClient.self] = newValue }
   }
@@ -35,15 +50,17 @@ extension DependencyValues {
 
 extension JournalStreakClient: DependencyKey {
   static var liveValue: Self {
+    nonisolated(unsafe) let streakManager = StreakManager()
+    
     return Self(
-      setStreak: { streak in
-        let currentStreak = UserDefaults().integer(forKey: "streak")
-        if streak > currentStreak {
-          UserDefaults().set(streak, forKey: "streak")
-        }
+      recordEntry: { date in
+        streakManager.recordEntry(date: date)
       },
-      getStreak: {
-        UserDefaults().integer(forKey: "streak")
+      getStreakInfo: {
+        streakManager.getStreakInfo()
+      },
+      resetStreak: {
+        streakManager.resetStreak()
       }
     )
   }
