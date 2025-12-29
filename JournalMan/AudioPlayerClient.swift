@@ -49,6 +49,8 @@ extension AudioPlayerClient: DependencyKey {
     @Dependency(FileManagerClient.self) var fileManager
     
     let getURLfromDate: @Sendable (Date) throws -> URL = { date in
+      print("🔍 Fetching audio for date: \(date)")
+      
       let result: (JournalEntry, JournalEntryAsset?) = try database.read { db in
         try JournalEntry
           .where { $0.date.eq(date.startOfDay()) }
@@ -56,16 +58,43 @@ extension AudioPlayerClient: DependencyKey {
           .fetchOne(db)!
       }
       
+      print("📊 Database query result - Entry: \(result.0.id), Asset exists: \(result.1 != nil)")
+      
       guard let asset = result.1 else {
+        print("❌ No audio asset found in database for date: \(date)")
+        throw AudioPlaybackError.noAssetFound
+      }
+      
+      print("✅ Found audio asset with ID: \(asset.assetID), data size: \(asset.audioData.count) bytes")
+      
+      guard !asset.audioData.isEmpty else {
+        print("❌ Audio data is empty!")
         throw AudioPlaybackError.noAssetFound
       }
       
       let tempURL = fileManager.createTemporaryFileURL(
-        withExtension: ".caf",
+        withExtension: "caf",
         with: asset.assetID
       )
       
-      try asset.audioData.write(to: tempURL)
+      print("📝 Writing audio data to: \(tempURL.path)")
+      print("📁 Temp directory: \(fileManager.temporaryDirectory().path)")
+      
+      try asset.audioData.write(to: tempURL, options: .atomic)
+      
+      guard fileManager.fileExists(tempURL) else {
+        print("❌ File was not written successfully to: \(tempURL.path)")
+        throw AudioPlaybackError.fileWriteFailed
+      }
+      
+      if let attributes = try? FileManager.default.attributesOfItem(atPath: tempURL.path),
+         let fileSize = attributes[.size] as? Int {
+        print("✅ Audio file written successfully. File size: \(fileSize) bytes")
+        
+        if fileSize != asset.audioData.count {
+          print("⚠️ Warning: File size (\(fileSize)) doesn't match data size (\(asset.audioData.count))")
+        }
+      }
       
       return tempURL
     }
@@ -74,6 +103,7 @@ extension AudioPlayerClient: DependencyKey {
       var currentDelegate: Delegate?
       
       func setDelegate(_ delegate: Delegate) {
+        currentDelegate?.cancel()
         currentDelegate = delegate
       }
       
@@ -82,7 +112,8 @@ extension AudioPlayerClient: DependencyKey {
       }
       
       func stop() {
-        currentDelegate?.player.stop()
+        currentDelegate?.cancel()
+        currentDelegate = nil
       }
       
       func seek(to position: TimeInterval) {
@@ -143,6 +174,7 @@ private final class Delegate: NSObject, AVAudioPlayerDelegate, Sendable {
   let didFinishPlaying: @Sendable (Bool) -> Void
   let decodeErrorDidOccur: @Sendable (Error?) -> Void
   let player: AVAudioPlayer
+  private nonisolated(unsafe) var hasResumed = false
   
   init(
     url: URL,
@@ -151,16 +183,56 @@ private final class Delegate: NSObject, AVAudioPlayerDelegate, Sendable {
   ) throws {
     self.didFinishPlaying = didFinishPlaying
     self.decodeErrorDidOccur = decodeErrorDidOccur
+    
+    try AVAudioSession.sharedInstance().setCategory(
+      .playback,
+      mode: .default,
+      options: []
+    )
+    try AVAudioSession.sharedInstance().setActive(true)
+    
+    print("🎵 Initializing AVAudioPlayer with file: \(url.path)")
     self.player = try AVAudioPlayer(contentsOf: url)
+    print("🎵 AVAudioPlayer created successfully. Duration: \(player.duration)s")
+    
     super.init()
     self.player.delegate = self
+    
+    guard self.player.prepareToPlay() else {
+      print("❌ Failed to prepare audio player")
+      throw AudioPlaybackError.playbackFailed
+    }
+    
+    print("✅ AVAudioPlayer prepared and ready to play")
+  }
+  
+  func cancel() {
+    resumeOnce(successfully: false)
+    player.stop()
+    try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+  }
+  
+  private func resumeOnce(successfully flag: Bool) {
+    if !hasResumed {
+      hasResumed = true
+      didFinishPlaying(flag)
+      try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
+  }
+  
+  private func resumeOnce(withError error: Error?) {
+    if !hasResumed {
+      hasResumed = true
+      decodeErrorDidOccur(error)
+      try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    }
   }
   
   func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-    self.didFinishPlaying(flag)
+    resumeOnce(successfully: flag)
   }
   
   func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: (any Error)?) {
-    self.decodeErrorDidOccur(error)
+    resumeOnce(withError: error)
   }
 }

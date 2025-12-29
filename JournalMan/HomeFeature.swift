@@ -69,7 +69,10 @@ struct HomeFeature {
         )
         
       case .path(.popFrom):
-        return .send(.calendar(.reloadEntries))
+        return .concatenate(
+          .send(.calendar(.reloadEntries)),
+          .cancel(id: CancelID.path)
+        )
         
       case .path:
         return .none

@@ -22,15 +22,19 @@ struct AudioPlayerFeature {
     var loadError: String?
   }
   
+  enum CancelID: Hashable {
+    case playback
+  }
+  
   enum Action: Equatable {
     case onAppear
     case journalEntryLoaded(JournalEntry, hasAudio: Bool)
     case loadFailed(String)
     case playButtonTapped
     case pauseButtonTapped
+    case playbackFinished
     case deleteButtonTapped
     case entryDeleted
-    case sheetDismissed
     case playbackFailed(Error)
     case delegate(Delegate)
     
@@ -43,9 +47,9 @@ struct AudioPlayerFeature {
       case (.onAppear, .onAppear),
         (.playButtonTapped, .playButtonTapped),
         (.pauseButtonTapped, .pauseButtonTapped),
+        (.playbackFinished, .playbackFinished),
         (.deleteButtonTapped, .deleteButtonTapped),
-        (.entryDeleted, .entryDeleted),
-        (.sheetDismissed, .sheetDismissed):
+        (.entryDeleted, .entryDeleted):
         return true
       case let (.journalEntryLoaded(lhsEntry, lhsHasAudio), .journalEntryLoaded(rhsEntry, rhsHasAudio)):
         return lhsEntry == rhsEntry && lhsHasAudio == rhsHasAudio
@@ -99,12 +103,16 @@ struct AudioPlayerFeature {
           state.isPlaying = true
           return .run { [date = state.date] send in
             do {
-             _ = try await audioPlayer.play(date: date)
+              let success = try await audioPlayer.play(date: date)
+              if success {
+                await send(.playbackFinished)
+              }
             } catch {
-              print(error.localizedDescription)
+              print("❌ Playback error: \(error.localizedDescription)")
               await send(.playbackFailed(error))
             }
           }
+          .cancellable(id: CancelID.playback)
         } else {
           return .none
         }
@@ -114,10 +122,29 @@ struct AudioPlayerFeature {
         return .run { _ in
           audioPlayer.pause()
         }
+      
+      case .playbackFinished:
+        state.isPlaying = false
+        print("✅ Playback finished successfully")
+        return .none
 
       case .playbackFailed(let error):
         state.isPlaying = false
         print("Playback failed: \(error.localizedDescription)")
+        
+        if let playbackError = error as? AudioPlaybackError {
+          switch playbackError {
+          case .noAssetFound:
+            state.loadError = "No audio recording found for this entry"
+          case .fileWriteFailed:
+            state.loadError = "Failed to prepare audio file for playback"
+          case .unknownDecodeError, .playbackFailed:
+            state.loadError = "Unable to play audio recording"
+          }
+        } else {
+          state.loadError = "Playback error: \(error.localizedDescription)"
+        }
+        
         return .none
 
       case .deleteButtonTapped:
@@ -143,12 +170,11 @@ struct AudioPlayerFeature {
         }
       
       case .entryDeleted:
-        return .send(.delegate(.entryDeleted))
-
-      case .sheetDismissed:
-        return .run { _ in
-          audioPlayer.stop()
-        }
+        return .concatenate(
+          .run { _ in audioPlayer.stop() },
+          .cancel(id: CancelID.playback),
+          .send(.delegate(.entryDeleted))
+        )
       
       case .delegate:
         return .none

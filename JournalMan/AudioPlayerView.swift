@@ -42,17 +42,7 @@ struct AudioPlayerView: View {
         .padding()
         
         if store.hasAudioAsset {
-          VStack(spacing: 24) {
-            RoundedRectangle(cornerRadius: 12)
-              .fill(.quaternary)
-              .frame(height: 80)
-              .overlay {
-                Image(systemName: "waveform")
-                  .font(.largeTitle)
-                  .foregroundStyle(.secondary)
-              }
-              .padding(.horizontal)
-            
+          VStack {
             Button {
               if store.isPlaying {
                 store.send(.pauseButtonTapped)
@@ -96,7 +86,6 @@ struct AudioPlayerView: View {
         
         Spacer()
         
-        // Delete button
         if store.hasAudioAsset {
           Button(role: .destructive) {
             store.send(.deleteButtonTapped)
@@ -112,9 +101,6 @@ struct AudioPlayerView: View {
     }
     .onAppear {
       store.send(.onAppear)
-    }
-    .onDisappear {
-      store.send(.sheetDismissed)
     }
   }
 }

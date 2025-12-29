@@ -26,8 +26,8 @@ struct CalendarView: View {
       Spacer()
     }
     .padding(.top)
-    .onAppear {
-      store.send(.onAppear)
+    .task {
+      await store.send(.reloadEntries).finish()
     }
   }
   
@@ -135,7 +135,9 @@ struct CalendarView: View {
   }
   
   private var recordButton: some View {
-    Button {
+    let hasEntryToday = store.state.hasEntry(for: store.state.today)
+    
+    return Button {
       store.send(.recordButtonTapped)
     } label: {
       HStack {
@@ -146,12 +148,13 @@ struct CalendarView: View {
       }
       .frame(maxWidth: .infinity)
       .padding()
-      .background(Color.accentColor)
+      .background(hasEntryToday ? Color.gray : Color.accentColor)
       .foregroundColor(.white)
       .cornerRadius(12)
     }
     .padding(.horizontal)
     .padding(.top, 10)
+    .disabled(hasEntryToday)
   }
 }
 

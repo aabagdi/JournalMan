@@ -126,6 +126,7 @@ private class AudioRecorder: @unchecked Sendable {
   @Dependency(\.defaultDatabase) var database
   @Dependency(TopicClassifierClient.self) var topicClassifier
   @Dependency(EmotionClassifierClient.self) var emotionClassifier
+  @Dependency(SentimentAnalyzerClient.self) var sentimentAnalyzer
   @Dependency(FileManagerClient.self) var fileManager
   @Dependency(SpeechRecognizerClient.self) var speechRecognizer
   
@@ -257,6 +258,29 @@ private class AudioRecorder: @unchecked Sendable {
     let transcript = try await speechRecognizer.transcribeFile(recordingURL)
     let audioData = try Data(contentsOf: recordingURL)
     
+    let audioEmotion = try await analyzeAudioEmotion(from: recordingURL)
+    
+    let textSentiment = try await sentimentAnalyzer.predict(text: transcript)
+    
+    let combinedEmotion = combineEmotionPredictions(
+      audioEmotion: audioEmotion,
+      textSentiment: textSentiment
+    )
+    
+    let topic = (try await self.topicClassifier.predict(transcript ?? "") ?? "unknown").capitalized
+    
+    try self.saveRecordingInDB(
+      audioData: audioData,
+      recordingID: recordingID,
+      emotion: combinedEmotion,
+      topic: topic,
+      transcript: transcript
+    )
+    
+    return true
+  }
+  
+  private func analyzeAudioEmotion(from recordingURL: URL) async throws -> EmotionPrediction {
     let windows = try AudioRecorder.extractAudioSamples(
       from: recordingURL,
       targetSampleCount: 15600
@@ -274,19 +298,69 @@ private class AudioRecorder: @unchecked Sendable {
       weightedVotes[topEmotion, default: 0] += confidence
     }
     
-    let dominantEmotion = weightedVotes.max { $0.value < $1.value }
+    let totalVotes = weightedVotes.values.reduce(0, +)
+    let normalizedVotes = weightedVotes.mapValues { $0 / totalVotes }
     
-    let topic = (try await self.topicClassifier.predict(transcript ?? "") ?? "unknown").capitalized
+    guard let dominantEmotion = normalizedVotes.max(by: { $0.value < $1.value }) else {
+      return EmotionPrediction(emotion: "unknown", confidence: 0.0)
+    }
     
-    try self.saveRecordingInDB(
-      audioData: audioData,
-      recordingID: recordingID,
-      emotion: dominantEmotion?.key.capitalized,
-      topic: topic,
-      transcript: transcript
+    return EmotionPrediction(
+      emotion: dominantEmotion.key,
+      confidence: dominantEmotion.value
     )
+  }
+  
+  private func combineEmotionPredictions(
+    audioEmotion: EmotionPrediction,
+    textSentiment: String?
+  ) -> String {
+    let sentimentToEmotion = mapSentimentToEmotion(textSentiment)
+
+    let finalEmotion: String
+    let useTextEmoji: Bool
     
-    return true
+    if audioEmotion.emotion == sentimentToEmotion {
+      finalEmotion = sentimentToEmotion
+      useTextEmoji = true
+    } else if sentimentToEmotion == "neutral" && audioEmotion.confidence > 0.85 {
+      finalEmotion = audioEmotion.emotion
+      useTextEmoji = false
+    } else {
+      finalEmotion = sentimentToEmotion
+      useTextEmoji = true
+    }
+    
+    if useTextEmoji, let emoji = textSentiment {
+      return "\(emoji) \(finalEmotion)"
+    } else {
+      let emoji = emotionToEmoji(finalEmotion)
+      return "\(emoji) \(finalEmotion)"
+    }
+  }
+  
+  private func emotionToEmoji(_ emotion: String) -> String {
+    switch emotion.lowercased() {
+    case "angry": return "🤬"
+    case "sad": return "😔"
+    case "calm", "neutral": return "🙂"
+    case "positive": return "😊"
+    case "happy": return "😍"
+    default: return "😶"
+    }
+  }
+  
+  private func mapSentimentToEmotion(_ sentiment: String?) -> String {
+    guard let sentiment else { return "neutral" }
+    
+    switch sentiment {
+    case "🤬": return "angry"
+    case "😔": return "sad"
+    case "🙂": return "calm"
+    case "😊": return "positive"
+    case "😍": return "happy"
+    default: return "neutral"
+    }
   }
 }
 

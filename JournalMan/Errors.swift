@@ -18,4 +18,5 @@ enum AudioPlaybackError: Error {
   case noAssetFound
   case unknownDecodeError
   case playbackFailed
+  case fileWriteFailed
 }
