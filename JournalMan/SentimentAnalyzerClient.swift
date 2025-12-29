@@ -17,7 +17,6 @@ struct SentimentAnalyzerClient {
 
 extension SentimentAnalyzerClient: DependencyKey {
   static let liveValue: Self = {
-    // Simplified to 5 sentiment categories that map to the 5 emotions
     let sentimentEmojis = [
       "🤬",
       "😔",
