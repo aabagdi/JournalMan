@@ -59,7 +59,8 @@ struct HomeFeature {
       case .path(.element(_, .record(.delegate(.recordingCompleted)))):
         state.path.removeLast()
         return .run { send in
-          try await Task.sleep(for: .milliseconds(100))
+          // Wait for navigation animation (typically 0.35s on iOS)
+          try await Task.sleep(for: .milliseconds(400))
           await send(.calendar(.reloadEntries))
         }
         
@@ -70,8 +71,7 @@ struct HomeFeature {
       case .path(.element(_, .player(.delegate(.entryDeleted)))):
         state.path.removeLast()
         return .run { send in
-          // Small delay for navigation animation to complete
-          try await Task.sleep(for: .milliseconds(100))
+          try await Task.sleep(for: .milliseconds(400))
           await send(.calendar(.reloadEntries))
         }
         

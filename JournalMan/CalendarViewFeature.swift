@@ -90,35 +90,41 @@ struct CalendarViewFeature {
         
       case .onAppear, .reloadEntries:
         print("Reloading entries...")
+        print("Current dates with entries: \(state.datesWithEntries)")
         state.today = now
         state.isLoading = true
         return .run { send in
           let dates = try await loadDatesWithEntries()
-          print("Database returned \(dates.count) dates")
+          print("Database returned \(dates.count) dates: \(dates)")
           await send(.datesWithEntriesLoaded(dates))
         }
         
       case let .datesWithEntriesLoaded(dates):
-        print("Loaded \(dates.count) dates with entries: \(dates)")
+        print("Loaded \(dates.count) dates with entries")
         print("Today is: \(calendar.startOfDay(for: now))")
+        print("Dates from DB: \(dates)")
         state.datesWithEntries = dates
         state.isLoading = false
         print("State now has \(state.datesWithEntries.count) dates")
+        print("Has entry for today? \(state.hasEntry(for: now))")
         return .none
       }
     }
   }
   
   private func loadDatesWithEntries() async throws -> Set<Date> {
-    try await database.read { db in
+    print("Loading dates from database...")
+    let result = try await database.read { db in
       @FetchAll var entries: [JournalEntry]
       let calendar = Calendar.current
       let dates = Set(entries.map { calendar.startOfDay(for: $0.date) })
       print("Raw entries from DB: \(entries.count)")
-      print("ntry dates: \(entries.map { $0.date })")
+      print("Entry dates: \(entries.map { $0.date })")
       print("Start of day dates: \(dates)")
       return dates
     }
+    print("Returning \(result.count) dates to caller")
+    return result
   }
 }
 

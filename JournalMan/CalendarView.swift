@@ -37,6 +37,8 @@ struct CalendarView: View {
       .disabled(store.isLoading)
       .blur(radius: store.isLoading ? 3 : 0)
       .animation(.easeInOut(duration: 0.2), value: store.isLoading)
+      // Force view to recreate when dates change
+      .id(store.datesWithEntries)
       
       if store.isLoading {
         ZStack {
@@ -62,6 +64,9 @@ struct CalendarView: View {
       }
     }
     .animation(.easeInOut(duration: 0.2), value: store.isLoading)
+    .task {
+      await store.send(.onAppear).finish()
+    }
   }
   
   // MARK: - Subviews
