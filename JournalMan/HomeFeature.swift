@@ -30,6 +30,7 @@ struct HomeFeature {
     case path(StackActionOf<Path>)
     case calendar(CalendarViewFeature.Action)
     case popRecordingScreen
+    case popPlayerScreen
   }
   
   var body: some Reducer<State, Action> {
@@ -56,11 +57,10 @@ struct HomeFeature {
         return .none
         
       case .path(.element(_, .record(.delegate(.recordingCompleted)))):
+        state.path.removeLast()
         return .run { send in
-          try await Task.sleep(for: .milliseconds(150))
+          try await Task.sleep(for: .milliseconds(100))
           await send(.calendar(.reloadEntries))
-          try await Task.sleep(for: .milliseconds(50))
-          await send(.popRecordingScreen)
         }
         
       case .popRecordingScreen:
@@ -69,7 +69,15 @@ struct HomeFeature {
         
       case .path(.element(_, .player(.delegate(.entryDeleted)))):
         state.path.removeLast()
-        return .send(.calendar(.reloadEntries))
+        return .run { send in
+          // Small delay for navigation animation to complete
+          try await Task.sleep(for: .milliseconds(100))
+          await send(.calendar(.reloadEntries))
+        }
+        
+      case .popPlayerScreen:
+        state.path.removeLast()
+        return .none
         
       case .path:
         return .none

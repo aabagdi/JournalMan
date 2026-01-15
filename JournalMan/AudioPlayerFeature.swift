@@ -125,7 +125,7 @@ struct AudioPlayerFeature {
       
       case .playbackFinished:
         state.isPlaying = false
-        print("✅ Playback finished successfully")
+        print("Playback finished successfully")
         return .none
 
       case .playbackFailed(let error):
@@ -164,6 +164,8 @@ struct AudioPlayerFeature {
                 .where { $0.id.eq(entry.id) }
                 .delete()
                 .execute(db)
+              
+              print("Successfully deleted entry from database: \(entry.id)")
             }
           }
           await send(.entryDeleted)

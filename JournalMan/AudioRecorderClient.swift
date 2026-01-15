@@ -116,6 +116,7 @@ private class AudioRecorder: @unchecked Sendable {
   private let recorder = LockIsolated<AVAudioRecorder?>(nil)
   
   private let currentRecordingID = LockIsolated<UUID?>(nil)
+  private let processingTask = LockIsolated<Task<Void, Never>?>(nil)
   
   private var currentRecordingURL: URL? {
     get { recorder.value?.url }
@@ -153,21 +154,32 @@ private class AudioRecorder: @unchecked Sendable {
     let recordingURL = self.recorder.value?.url
     let recordingID = self.currentRecordingID.value
     
-    self.recorder.value?.stop()
-    self.recorder.setValue(nil)
-    self.delegate.setValue(nil)
+    print("Stop called - wasRecording: \(wasRecording)")
     
-    if wasRecording, let url = recordingURL, let id = recordingID {
+    self.recorder.value?.stop()
+    
+    try? await Task.sleep(for: .milliseconds(50))
+    
+    if let task = self.processingTask.value {
+      print("Waiting for delegate processing to complete...")
+      await task.value
+      self.processingTask.setValue(nil)
+      print("Delegate processing completed")
+    } else if wasRecording, let url = recordingURL, let id = recordingID {
       do {
+        print("Processing recording on manual stop...")
         _ = try await processRecording(at: url, recordingID: id)
+        print("Recording processed successfully")
       } catch {
         print("Failed to process recording on manual stop: \(error)")
       }
-    }
-    
-    if let url = recordingURL {
+      
       await cleanupTempFile(at: url)
     }
+    
+    // Clean up after processing is complete
+    self.recorder.setValue(nil)
+    self.delegate.setValue(nil)
     
     try? AVAudioSession.sharedInstance().setActive(false)
     
@@ -200,17 +212,20 @@ private class AudioRecorder: @unchecked Sendable {
           
           print("Delegate: Recording finished with flag: \(flag)")
           
-          Task {
+          let task = Task {
             guard flag,
                   let recorder = self.recorder.value,
                   let recordingID = self.currentRecordingID.value else {
+              print("Skipping processing: flag=\(flag)")
               return
             }
             
             let recordingURL = recorder.url
             
             do {
+              print("Processing recording from delegate...")
               _ = try await self.processRecording(at: recordingURL, recordingID: recordingID)
+              print("Recording processed successfully from delegate")
             } catch {
               print("Failed to process recording: \(error)")
             }
@@ -219,6 +234,8 @@ private class AudioRecorder: @unchecked Sendable {
             
             try? AVAudioSession.sharedInstance().setActive(false)
           }
+          
+          self.processingTask.setValue(task)
         },
         encodeErrorDidOccur: { error in
           print("Recording encode error: \(error?.localizedDescription ?? "unknown")")
@@ -319,7 +336,7 @@ private class AudioRecorder: @unchecked Sendable {
     textSentiment: String?
   ) -> String {
     let sentimentToEmotion = mapSentimentToEmotion(textSentiment)
-
+    
     let finalEmotion: String
     let useTextEmoji: Bool
     
@@ -589,6 +606,8 @@ extension AudioRecorder {
           journalEntryAsset
         }
         .execute(db)
+        
+        print("Successfully saved recording to database: \(recordingID)")
       }
     }
   }

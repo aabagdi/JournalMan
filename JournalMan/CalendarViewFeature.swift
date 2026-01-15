@@ -17,6 +17,7 @@ struct CalendarViewFeature {
     var currentMonth: Date
     var today: Date
     var datesWithEntries: Set<Date> = []
+    var isLoading: Bool = false
     
     init(
       currentMonth: Date = Date(),
@@ -90,6 +91,7 @@ struct CalendarViewFeature {
       case .onAppear, .reloadEntries:
         print("Reloading entries...")
         state.today = now
+        state.isLoading = true
         return .run { send in
           let dates = try await loadDatesWithEntries()
           print("Database returned \(dates.count) dates")
@@ -100,6 +102,7 @@ struct CalendarViewFeature {
         print("Loaded \(dates.count) dates with entries: \(dates)")
         print("Today is: \(calendar.startOfDay(for: now))")
         state.datesWithEntries = dates
+        state.isLoading = false
         print("State now has \(state.datesWithEntries.count) dates")
         return .none
       }

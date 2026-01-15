@@ -16,23 +16,52 @@ struct CalendarView: View {
   let days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
   
   var body: some View {
-    VStack(spacing: 20) {
-      monthHeader
+    ZStack {
+      VStack(spacing: 20) {
+        monthHeader
+        
+        weekDaysHeader
+        
+        calendarGrid
+        
+        recordButton
+        
+        Spacer()
+      }
+      .toolbar {
+        let info = journalStreak.getStreakInfo()
+        Text("Longest streak: \(String(info.currentStreak))")
+          .padding()
+      }
+      .padding(.top)
+      .disabled(store.isLoading)
+      .blur(radius: store.isLoading ? 3 : 0)
+      .animation(.easeInOut(duration: 0.2), value: store.isLoading)
       
-      weekDaysHeader
-      
-      calendarGrid
-      
-      recordButton
-      
-      Spacer()
+      if store.isLoading {
+        ZStack {
+          Color.clear
+            .background(.ultraThinMaterial)
+            .ignoresSafeArea()
+          
+          VStack(spacing: 16) {
+            ProgressView()
+              .progressViewStyle(.circular)
+              .scaleEffect(1.5)
+            
+            Text("Updating...")
+              .font(.headline)
+          }
+          .padding(32)
+          .background(
+            RoundedRectangle(cornerRadius: 16)
+              .fill(.regularMaterial)
+          )
+        }
+        .transition(.opacity)
+      }
     }
-    .toolbar {
-      let info = journalStreak.getStreakInfo()
-      Text("Longest streak: \(String(info.currentStreak))")
-        .padding()
-    }
-    .padding(.top)
+    .animation(.easeInOut(duration: 0.2), value: store.isLoading)
   }
   
   // MARK: - Subviews
